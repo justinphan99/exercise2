@@ -19,7 +19,6 @@ def select_an_account(accountId,conn):
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.account WHERE account.accountId = '{}'""".format(accountId))
         data = cur.fetchone()
-        print(">>> select_an_account successfully")
         if data == None:
             return data
         else:
@@ -36,7 +35,6 @@ def select_an_account(accountId,conn):
             data = data_dict
             return data
     except Exception as e:
-        print(">>> select_an_account failed")
         print("Error: " +str(e))
         return 404
 
@@ -59,7 +57,6 @@ def select_a_merchant(merchantId, accountId, conn):
             "merchantUrl": merchantUrl
         }
         data = data_dict
-        print("select a merchant")
         return data
     except Exception as e:
         print(">>> Cannot select an merchant from table merchant")
@@ -105,13 +102,10 @@ def encode_auth_token(accountId):
     try:
         conn = connection()
         merchantId = select_an_account(accountId,conn)['merchantId']
-        print("merchantId encode")
-        print(str(merchantId))
         if merchantId:
             key=select_a_merchant(merchantId,accountId,conn)['apiKey']
         else:
             key='8a2a77be-b657-11ec-b909-0242ac120002'
-        print(key)
         payload = {
             'sub': accountId
         }
@@ -120,7 +114,6 @@ def encode_auth_token(accountId):
             key,
             algorithm='HS256'
         )
-        print("token encode: "+str(token))
         return token
     except Exception as e:
         return e
@@ -128,8 +121,6 @@ def encode_auth_token(accountId):
 def decode_auth_token(auth_token, data):
     try:
         conn = connection()
-        print("data: " +str(data))
-
         if 'merchantId' in data:
             merchantId = data['merchantId']
             key=select_a_merchant(merchantId,'',conn)['apiKey']
@@ -138,11 +129,9 @@ def decode_auth_token(auth_token, data):
         else:
             key = '8a2a77be-b657-11ec-b909-0242ac120002'
         
-        print("key: "+str(key))
         payload = jwt.decode(auth_token, key, algorithms=["HS256"])
         accountIddecode = payload['sub']
-        print("accountIddecode: "+str(accountIddecode))
         return accountIddecode
     except Exception as e:
-        print("error : " + str(e))
+        print("Error : " + str(e))
 

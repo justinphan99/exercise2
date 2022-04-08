@@ -17,7 +17,6 @@ def connection():
 def getLoggedInAccount(authToken,data):
     if (authToken):
         resp = decode_auth_token(authToken,data)
-        print(resp)
         conn = connection()
         if resp:
             account = AccountService.select_an_account(resp, conn)

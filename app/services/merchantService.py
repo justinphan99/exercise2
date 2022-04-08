@@ -12,7 +12,6 @@ def select_all_merchant():
             SELECT * FROM public.merchant;
         """)
         data = cur.fetchall()
-        print(data)
         print(">>> Select * from table merchant successfully")
         return data
     except Exception as e:
@@ -44,7 +43,6 @@ def select_a_merchant(merchantId, accountId, conn):
             "merchantUrl": merchantUrl
         }
         data = data_dict
-        print("select a merchant")
         return data
     except Exception as e:
         print(">>> Cannot select an merchant from table merchant")
@@ -64,14 +62,12 @@ def create_a_merchant(data):
         VALUES ('{0}','{1}', '{2}', '{3}')
         """.format(merchantName,merchantId,apiKey,merchantUrl))
         conn.commit()  
-        print("create a merchant")
         # create_a_merchant_account(accountId,merchantId)
         try:
             accountType = 'merchant'
             cur.execute("""INSERT INTO public.account (accountId, accountType, merchantId)
             VALUES ('{0}','{1}','{2}')""".format(accountId,accountType,merchantId))
             conn.commit()    
-            print("create a merchant account")
         except:
             print(">>> Cannot create merchant account")
             print("Error: " +str(e))
@@ -94,5 +90,4 @@ def merchant_update_order_status(data):
     url = "http://127.0.0.1:5000/order/status"
     headers = {'Content-type': 'application/json'}
     a = requests.post(url=url,data=json.dumps(data), headers=headers)
-    print(a.json())
     return a.json()

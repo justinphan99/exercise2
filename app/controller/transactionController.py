@@ -10,7 +10,6 @@ class TransactionCreateController():
         if self.method == "GET":
             pass
         elif self.method == "POST":
-            print(">>> TransactionCreateController post")
             return create_a_transaction(token, data)
 
 class TransactionConfirmController():
@@ -23,7 +22,6 @@ class TransactionConfirmController():
         if self.method == "GET":
             pass
         elif self.method == "POST":
-            print(">>> TransactionConfirmController post")
             return confirm_a_transaction(token, data)
 
 
@@ -37,7 +35,6 @@ class TransactionVerifyController():
         if self.method == "GET":
             pass
         elif self.method == "POST":
-            print(">>> TransactionVerifyController post")
             return verify_a_transaction(token, data)
 
 
@@ -51,5 +48,4 @@ class TransactionCancelController():
         if self.method == "GET":
             pass
         elif self.method == "POST":
-            print(">>> TransactionCancelController post")
             return cancel_a_transaction(token, data)

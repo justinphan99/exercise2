@@ -18,7 +18,6 @@ class AccountTokenController():
         
     def operation(self,token,data,param,query):
         if self.method == "GET":
-            print("GET ACCOUNT TOKEN")
             return get_account_token(param)
         elif self.method == "POST":
             pass

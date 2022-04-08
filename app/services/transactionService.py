@@ -50,23 +50,21 @@ def check_transaction_status(transactionId, conn):
     try:
         data = select_a_transaction(transactionId, conn)
         status = data['status']
-        print(status)
         if status == "COMPLETED":
             return 1
         else:
             return check_transaction_status(transactionId,conn)
-    except:
-        print("outtttttt")
+    except Exception as e:
+        print("Error: "+str(e))
 
 
 @tokenMerchantRequired
 @timeout(5)
 def create_a_transaction(token, data):
     try:
-        print(data)
+        #time.sleep(10)
         transactionId = str(uuid.uuid4())
         merchantId = data['merchantId']
-        print("9999999999999999")
         incomeAccount = decode_auth_token(token,data)
         amount = data['amount']
         extraData = data['extraData']
@@ -81,9 +79,7 @@ def create_a_transaction(token, data):
             cur = conn.cursor()
             cur.execute(query)
             conn.commit()    
-            print("create a transaction")
             data = select_a_transaction(transactionId, conn)
-            print("not time out")
             return data
         
         except Exception as e:
@@ -95,8 +91,8 @@ def create_a_transaction(token, data):
             if conn is not None:
                 cur.close()
                 conn.close()
-    except TimeoutError():
-        print("time out")
+    except:
+        conn = connection()
         transactionId = str(uuid.uuid4())
         merchantId = data['merchantId']
         incomeAccount = decode_auth_token(token,data)
@@ -105,25 +101,15 @@ def create_a_transaction(token, data):
         dataTemp = {"merchantId": merchantId, "amount": amount, "extraData": extraData}
         signature = hashlib.md5(json.dumps(dataTemp).encode('utf-8')).hexdigest()
         status = 'EXPIRED'
-        merchantUrl = select_a_transaction(merchantId, conn)['merchantUrl']
-        order_data = {
-            "order_id": extraData,
-            "payment_status": "EXPIRED"
-        }
+       
         try:
-            conn = connection()
             query = """INSERT INTO public.transaction 
             (transactionId, merchantId, incomeAccount, amount, extraData, signature, status)
             VALUES ('{0}','{1}', '{2}', {3}, '{4}', '{5}', '{6}');""".format(transactionId, merchantId, incomeAccount, amount, extraData, signature, status)
             cur = conn.cursor()
             cur.execute(query)
             conn.commit()    
-            print("create a transaction")
             data = select_a_transaction(transactionId, conn)
-            print("not time out")
-
-            requests.post(url=merchantUrl, data=order_data)
-
             return data
         
         except Exception as e:
@@ -156,7 +142,6 @@ def confirm_a_transaction(token, data):
         cur = conn.cursor()
         cur.execute(query)
         conn.commit()    
-        print("confirm a transaction")
         data = {
             "code": status,
             "message": "transaction {}".format(status)
@@ -203,10 +188,6 @@ def verify_a_transaction(token, data):
         cur.execute(query)
         conn.commit()
 
-        #update_order_status(transactionId,status,conn)
-
-        print("verify a transaction")
-
         data = {
             "code": status,
             "message": "transaction {}".format(status)
@@ -239,13 +220,10 @@ def cancel_a_transaction(token, data):
         cur = conn.cursor()
         cur.execute(query)
         conn.commit()
-        print("cancel a transaction")
-
         data = {
             "code": status,
             "message": "transaction {}".format(status)
         }
-        #update_order_status(transactionId,status,conn)
         return data
     
     except Exception as e:
@@ -280,11 +258,6 @@ def update_order_status(transactionId, payment_status, conn):
         "payment_status": payment_status
     }
     headers = {'Content-type': 'application/json'}
-    print(url)
-    print(data)
-    
-    headers = {'Content-type': 'application/json'}
-
     a = requests.post(url=url,data=json.dumps(data), headers=headers)
     print(a.status_code)
     
