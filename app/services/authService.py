@@ -6,7 +6,7 @@ def connection():
     try:
         conn = psycopg2.connect(
         host="localhost",
-        database="eWallet",
+        database="exe2",
         user="admin",
         password="admin")
     except Exception as e:

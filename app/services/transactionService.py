@@ -114,40 +114,40 @@ def confirm_a_transaction(token, data):
     conn = connection()
     accountPersonalId = decode_auth_token(token,data)
     transactionId = data['transactionId']
-    
     balance_account = float(select_an_account(accountPersonalId,conn)["balance"])
-    amount_transaction = float(select_a_transaction(transactionId, conn)["amount"])
+    transaction = select_a_transaction(transactionId, conn)
+    amount_transaction = float(transaction["amount"])
+    status_old = transaction["status"]
 
-    if balance_account>0 and balance_account>=amount_transaction:
-        status = 'CONFIRMED'
+    if status_old == 'INITIALIZED':
+        if balance_account>0 and balance_account>=amount_transaction:
+            status = 'CONFIRMED'
+        else:
+            status = 'FAILED'
+        try:
+            query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
+            WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
+            cur = conn.cursor()
+            cur.execute(query)
+            conn.commit()    
+            data = {
+                "code": status,
+                "message": "transaction {}".format(status)
+            }
+            update_order_status(transactionId,status,conn)
+            return data  
+        except Exception as e:
+            status = "FAILED"
+            update_transaction_status(transactionId,status,conn)
+            print(">>> Cannot update transaction")
+            print("Error: " +str(e))
+            return 404
+        finally:
+            if conn is not None:
+                cur.close()
+                conn.close()
     else:
-        status = 'FAILED'
-    try:
-        query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
-        WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
-        cur = conn.cursor()
-        cur.execute(query)
-        conn.commit()    
-        data = {
-            "code": status,
-            "message": "transaction {}".format(status)
-        }
-        update_order_status(transactionId,status,conn)
-
-        return data
-        
-    except Exception as e:
-        status = "FAILED"
-        update_transaction_status(transactionId,status,conn)
-        print(">>> Cannot update transaction")
-        print("Error: " +str(e))
         return 404
-
-    finally:
-        if conn is not None:
-            cur.close()
-            conn.close()
-
 
 @tokenPersonalRequired
 def verify_a_transaction(token, data):
@@ -155,51 +155,63 @@ def verify_a_transaction(token, data):
     accountPersonalId = decode_auth_token(token,data)
     transactionId = data['transactionId']
     balance_account = float(select_an_account(accountPersonalId,conn)["balance"])
-    amount_transaction = float(select_a_transaction(transactionId, conn)["amount"])
+    transaction = select_a_transaction(transactionId, conn)
+    amount_transaction = float(transaction["amount"])
+    status_old = transaction["status"]
+    if status_old == 'CONFIRMED':
+        if balance_account>0 and balance_account>=amount_transaction:
+            status = 'VERIFIED'
+            balance_account = balance_account - amount_transaction
+        else:
+            status = 'FAILED'
+        try:
+            query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
+            WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
+            cur = conn.cursor()
+            cur.execute(query)
 
-    if balance_account>0 and balance_account>=amount_transaction:
-        status = 'VERIFIED'
-        balance_account = balance_account - amount_transaction
+            query = """UPDATE public.account SET balance = {0}
+            WHERE account.accountId = '{1}'""".format(balance_account, accountPersonalId)
+            cur.execute(query)
+            
+            query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
+            WHERE transaction.transactionId = '{2}'""".format("COMPLETED", accountPersonalId, transactionId)
+            cur.execute(query)
+
+            conn.commit()
+
+            data = {
+                "code": status,
+                "message": "transaction {}".format(status)
+            }
+
+            update_order_status(transactionId,status,conn)
+            return data
+        
+        except Exception as e:
+            status = "FAILED"
+            update_transaction_status(transactionId,status,conn)
+            update_order_status(transactionId,status,conn)
+            print(">>> Cannot update transaction")
+            print("Error: " +str(e))
+            return 404
+
+        finally:
+            if conn is not None:
+                cur.close()
+                conn.close()
     else:
-        status = 'FAILED'
-    try:
-        query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
-        WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
-        cur = conn.cursor()
-        cur.execute(query)
-
-        query = """UPDATE public.account SET balance = {0}
-        WHERE account.accountId = '{1}'""".format(balance_account, accountPersonalId)
-        cur.execute(query)
-        conn.commit()
-
-        data = {
-            "code": status,
-            "message": "transaction {}".format(status)
-        }
-
-        update_order_status(transactionId,status,conn)
-        return data
-    
-    except Exception as e:
-        status = "FAILED"
-        update_transaction_status(transactionId,status,conn)
-        update_order_status(transactionId,status,conn)
-        print(">>> Cannot update transaction")
-        print("Error: " +str(e))
         return 404
-
-    finally:
-        if conn is not None:
-            cur.close()
-            conn.close()
-
 
 @tokenPersonalRequired
 def cancel_a_transaction(token, data):
     conn = connection()
     transactionId = data['transactionId']
     status = 'CANCELED'
+    transaction = select_a_transaction(transactionId, conn)
+    status_old = transaction["status"]
+    if status_old == 'CONFIRMED':
+        return 404
 
     try:
         query = """UPDATE public.transaction SET status = '{0}'
