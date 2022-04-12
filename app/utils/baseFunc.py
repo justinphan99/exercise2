@@ -14,8 +14,9 @@ def connection():
         print("Error: " + str(e))
     return conn
 
-def select_an_account(accountId,conn):
+def select_an_account(accountId):
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.account WHERE account.accountId = '{}'""".format(accountId))
         data = cur.fetchone()
@@ -37,10 +38,14 @@ def select_an_account(accountId,conn):
     except Exception as e:
         print("Error: " +str(e))
         return 404
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
-
-def select_a_merchant(merchantId, accountId, conn):
+def select_a_merchant(merchantId, accountId):
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.merchant WHERE merchant.merchantId = '{}'""".format(merchantId))
         data = cur.fetchone()
@@ -62,10 +67,15 @@ def select_a_merchant(merchantId, accountId, conn):
         print(">>> Cannot select an merchant from table merchant")
         print("Error: " +str(e))
         return 404
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
 
-def select_a_transaction(transactionId,conn):
+def select_a_transaction(transactionId):
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.transaction WHERE transaction.transactionId = '{}'""".format(transactionId))
         data = cur.fetchone()
@@ -96,14 +106,16 @@ def select_a_transaction(transactionId,conn):
         print(">>> Cannot select an transaction from table transaction")
         print("Error: " +str(e))
         return 404
-
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
 def encode_auth_token(accountId):
     try:
-        conn = connection()
-        merchantId = select_an_account(accountId,conn)['merchantId']
+        merchantId = select_an_account(accountId)['merchantId']
         if merchantId:
-            key=select_a_merchant(merchantId,accountId,conn)['apiKey']
+            key=select_a_merchant(merchantId,accountId)['apiKey']
         else:
             key='8a2a77be-b657-11ec-b909-0242ac120002'
         payload = {
@@ -120,10 +132,9 @@ def encode_auth_token(accountId):
 
 def decode_auth_token(auth_token, data):
     try:
-        conn = connection()
         if 'merchantId' in data:
             merchantId = data['merchantId']
-            key=select_a_merchant(merchantId,'',conn)['apiKey']
+            key=select_a_merchant(merchantId,'')['apiKey']
         elif 'transactionId' in data:
             key = '8a2a77be-b657-11ec-b909-0242ac120002'
         else:

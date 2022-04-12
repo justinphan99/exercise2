@@ -12,8 +12,9 @@ import time
 from datetime import datetime
 import requests
 
-def select_a_transaction(transactionId,conn):
+def select_a_transaction(transactionId):
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.transaction WHERE transaction.transactionId = '{}'""".format(transactionId))
         data = cur.fetchone()
@@ -44,11 +45,15 @@ def select_a_transaction(transactionId,conn):
         print(">>> Cannot select an transaction from table transaction")
         print("Error: " +str(e))
         return 404
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()    
+
 
 @tokenMerchantRequired
 def create_a_transaction(token, data):
     try:
-        #time.sleep(10)
         transactionId = str(uuid.uuid4())
         merchantId = data['merchantId']
         incomeAccount = decode_auth_token(token,data)
@@ -65,7 +70,7 @@ def create_a_transaction(token, data):
             cur = conn.cursor()
             cur.execute(query)
             conn.commit()    
-            data = select_a_transaction(transactionId, conn)
+            data = select_a_transaction(transactionId)
             return data
         
         except Exception as e:
@@ -78,7 +83,7 @@ def create_a_transaction(token, data):
                 cur.close()
                 conn.close()
     except:
-        conn = connection()
+        
         transactionId = str(uuid.uuid4())
         merchantId = data['merchantId']
         incomeAccount = decode_auth_token(token,data)
@@ -89,13 +94,14 @@ def create_a_transaction(token, data):
         status = 'FAILED'
        
         try:
+            conn = connection()
             query = """INSERT INTO public.transaction 
             (transactionId, merchantId, incomeAccount, amount, extraData, signature, status)
             VALUES ('{0}','{1}', '{2}', {3}, '{4}', '{5}', '{6}');""".format(transactionId, merchantId, incomeAccount, amount, extraData, signature, status)
             cur = conn.cursor()
             cur.execute(query)
             conn.commit()    
-            data = select_a_transaction(transactionId, conn)
+            data = select_a_transaction(transactionId)
             return data
         
         except Exception as e:
@@ -114,106 +120,108 @@ def confirm_a_transaction(token, data):
     conn = connection()
     accountPersonalId = decode_auth_token(token,data)
     transactionId = data['transactionId']
-    balance_account = float(select_an_account(accountPersonalId,conn)["balance"])
-    transaction = select_a_transaction(transactionId, conn)
+    balance_account = float(select_an_account(accountPersonalId)["balance"])
+    transaction = select_a_transaction(transactionId)
     amount_transaction = float(transaction["amount"])
     status_old = transaction["status"]
-
-    if status_old == 'INITIALIZED':
-        if balance_account>0 and balance_account>=amount_transaction:
-            status = 'CONFIRMED'
-        else:
-            status = 'FAILED'
-        try:
-            query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
-            WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
-            cur = conn.cursor()
-            cur.execute(query)
-            conn.commit()    
-            data = {
-                "code": status,
-                "message": "transaction {}".format(status)
-            }
-            update_order_status(transactionId,status,conn)
-            return data  
-        except Exception as e:
-            status = "FAILED"
-            update_transaction_status(transactionId,status,conn)
-            print(">>> Cannot update transaction")
-            print("Error: " +str(e))
-            return 404
-        finally:
-            if conn is not None:
-                cur.close()
-                conn.close()
-    else:
+    if status_old != 'INITIALIZED':
         return 404
+
+    if balance_account>0 and balance_account>=amount_transaction:
+        status = 'CONFIRMED'
+    else:
+        status = 'FAILED'
+    try:
+        query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
+        WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
+        cur = conn.cursor()
+        cur.execute(query)
+        conn.commit()    
+        data = {
+            "code": status,
+            "message": "transaction {}".format(status)
+        }
+        update_order_status(transactionId,status)
+        return data  
+    except Exception as e:
+        status = "FAILED"
+        update_transaction_status(transactionId,status)
+        print(">>> Cannot update transaction")
+        print("Error: " +str(e))
+        return 404
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
 @tokenPersonalRequired
 def verify_a_transaction(token, data):
-    conn = connection()
+    
     accountPersonalId = decode_auth_token(token,data)
     transactionId = data['transactionId']
-    balance_account = float(select_an_account(accountPersonalId,conn)["balance"])
-    transaction = select_a_transaction(transactionId, conn)
+    balance_account = float(select_an_account(accountPersonalId)["balance"])
+    transaction = select_a_transaction(transactionId)
+    merchantId = transaction["incomeAccount"]
     amount_transaction = float(transaction["amount"])
     status_old = transaction["status"]
-    if status_old == 'CONFIRMED':
-        if balance_account>0 and balance_account>=amount_transaction:
-            status = 'VERIFIED'
-            balance_account = balance_account - amount_transaction
-        else:
-            status = 'FAILED'
-        try:
-            query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
-            WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
-            cur = conn.cursor()
-            cur.execute(query)
-
-            query = """UPDATE public.account SET balance = {0}
-            WHERE account.accountId = '{1}'""".format(balance_account, accountPersonalId)
-            cur.execute(query)
-            
-            query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
-            WHERE transaction.transactionId = '{2}'""".format("COMPLETED", accountPersonalId, transactionId)
-            cur.execute(query)
-
-            conn.commit()
-
-            data = {
-                "code": status,
-                "message": "transaction {}".format(status)
-            }
-
-            update_order_status(transactionId,status,conn)
-            return data
-        
-        except Exception as e:
-            status = "FAILED"
-            update_transaction_status(transactionId,status,conn)
-            update_order_status(transactionId,status,conn)
-            print(">>> Cannot update transaction")
-            print("Error: " +str(e))
-            return 404
-
-        finally:
-            if conn is not None:
-                cur.close()
-                conn.close()
-    else:
+    if status_old != 'CONFIRMED':
         return 404
+    if balance_account>0 and balance_account>=amount_transaction:
+        status = 'VERIFIED'
+        balance_account = balance_account - amount_transaction
+        update_balance_account(merchantId,amount_transaction)
+    else:
+        status = 'FAILED'
+    try:
+        conn = connection()
+        query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
+        WHERE transaction.transactionId = '{2}'""".format(status, accountPersonalId, transactionId)
+        cur = conn.cursor()
+        cur.execute(query)
+
+        query = """UPDATE public.account SET balance = {0}
+        WHERE account.accountId = '{1}'""".format(balance_account, accountPersonalId)
+        cur.execute(query)
+        
+        query = """UPDATE public.transaction SET status = '{0}', outcomeAccount = '{1}'
+        WHERE transaction.transactionId = '{2}'""".format("COMPLETED", accountPersonalId, transactionId)
+        cur.execute(query)
+
+        conn.commit()
+
+        data = {
+            "code": status,
+            "message": "transaction {}".format(status)
+        }
+
+        update_order_status(transactionId,"COMPLETED")
+        return data
+    
+    except Exception as e:
+        status = "FAILED"
+        update_transaction_status(transactionId,status)
+        update_order_status(transactionId,status)
+        print(">>> Cannot update transaction")
+        print("Error: " +str(e))
+        return 404
+
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
+
 
 @tokenPersonalRequired
 def cancel_a_transaction(token, data):
-    conn = connection()
     transactionId = data['transactionId']
     status = 'CANCELED'
-    transaction = select_a_transaction(transactionId, conn)
+    transaction = select_a_transaction(transactionId)
     status_old = transaction["status"]
-    if status_old == 'CONFIRMED':
+    if status_old != 'CONFIRMED':
         return 404
 
     try:
+        conn = connection()
         query = """UPDATE public.transaction SET status = '{0}'
         WHERE transaction.transactionId = '{1}'""".format(status, transactionId)
         cur = conn.cursor()
@@ -223,14 +231,14 @@ def cancel_a_transaction(token, data):
             "code": status,
             "message": "transaction {}".format(status)
         }
-        update_order_status(transactionId,status,conn)
+        update_order_status(transactionId,status)
 
         return data
     
     except Exception as e:
         status = "FAILED"
-        update_transaction_status(transactionId,status,conn)
-        update_order_status(transactionId,status,conn)
+        update_transaction_status(transactionId,status)
+        update_order_status(transactionId,status)
         print(">>> Cannot cancel transaction")
         print("Error: " +str(e))
         return 404
@@ -240,10 +248,11 @@ def cancel_a_transaction(token, data):
             cur.close()
             conn.close()
 
-def update_transaction_status(transactionId, status, conn):
+def update_transaction_status(transactionId, status):
     query = """UPDATE public.transaction SET status = '{0}'
     WHERE transaction.transactionId = '{1}'""".format(status, transactionId)
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute(query)
         conn.commit()    
@@ -252,9 +261,9 @@ def update_transaction_status(transactionId, status, conn):
     except:
         return 404
 
-def update_order_status(transactionId, payment_status, conn):
-    extraData = select_a_transaction(transactionId, conn)["extraData"]
-    merchantId = select_a_transaction(transactionId, conn)["merchantId"]
+def update_order_status(transactionId, payment_status):
+    extraData = select_a_transaction(transactionId)["extraData"]
+    merchantId = select_a_transaction(transactionId)["merchantId"]
     #url = select_a_merchant(merchantId,'',conn)['merchantUrl']
     url = "http://127.0.0.1:5000/order/status"
     data = {
@@ -266,11 +275,12 @@ def update_order_status(transactionId, payment_status, conn):
     print(a.status_code)
     
 
-def getAllNotExpiredTransaction(conn):
+def getAllNotExpiredTransaction():
     sql = """SELECT * FROM public.transaction
             WHERE status != 'CANCELED' AND status != 'COMPLETED' AND status != 'EXPIRED'
     """
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute(sql)
         data = cur.fetchall()
@@ -291,11 +301,14 @@ def getAllNotExpiredTransaction(conn):
     except Exception as e:
         print("Can\'t get all transaction, error: " + str(e))
         return 404
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
 
 def checkTransactionExpire():
-    conn = connection()
-    transactions = getAllNotExpiredTransaction(conn)
+    transactions = getAllNotExpiredTransaction()
     if (len(transactions) <= 0):
         print('No expired transaction found')
         return
@@ -305,7 +318,5 @@ def checkTransactionExpire():
             now = datetime.now()
             expiredTime = ((now - tranDateTime).total_seconds())/60
             if (expiredTime > 5):
-                update_transaction_status(tran['transactionId'],'EXPIRED',conn)
-                update_order_status(tran['transactionId'],'EXPIRED',conn)
-    if conn is not None:
-        conn.close()
+                update_transaction_status(tran['transactionId'],'EXPIRED')
+                update_order_status(tran['transactionId'],'EXPIRED')

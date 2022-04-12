@@ -19,7 +19,7 @@ def getLoggedInAccount(authToken,data):
         resp = decode_auth_token(authToken,data)
         conn = connection()
         if resp:
-            account = AccountService.select_an_account(resp, conn)
+            account = AccountService.select_an_account(resp)
             return account
         else:
             return None

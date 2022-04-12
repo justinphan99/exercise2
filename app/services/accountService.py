@@ -4,8 +4,8 @@ from app.utils.decorator import tokenIssuerRequired
 from app.utils.baseFunc import connection
 
 def select_all_account():
-    conn = connection()
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.account;""")
         data = cur.fetchall()
@@ -21,8 +21,9 @@ def select_all_account():
             cur.close()
             conn.close()
 
-def select_an_account(accountId,conn):
+def select_an_account(accountId):
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT * FROM public.account WHERE account.accountId = '{}'""".format(accountId))
         data = cur.fetchone()
@@ -44,37 +45,38 @@ def select_an_account(accountId,conn):
         print(">>> select_an_account failed")
         print("Error: " +str(e))
         return 404
-
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
 def create_an_account(data):
     accountType = str(data['accountType'])
     if accountType == 'personal' or accountType == 'issuer':
-        conn = connection()
         try:
+            conn = connection()
             cur = conn.cursor()
             accountId = str(uuid.uuid4())
             cur.execute("""INSERT INTO public.account (accountId, accountType)
             VALUES ('{0}','{1}')""".format(accountId,accountType))
             conn.commit()    
-            data = select_an_account(accountId,conn) 
+            data = select_an_account(accountId) 
             return data
         except Exception as e:
             print(">>> Cannot create account")
             print("Error: " +str(e))
             return 404
-
         finally:
             if conn is not None:
                 cur.close()
                 conn.close()
-
     else:
         return 404
 
 def create_a_merchant_account(accountId, merchantId):
-    conn = connection()
     try:
         accountType = 'merchant'
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""INSERT INTO public.account (accountId, accountType, merchantId)
         VALUES ('{0}','{1}','{2}')""".format(accountId,accountType,merchantId))
@@ -85,7 +87,6 @@ def create_a_merchant_account(accountId, merchantId):
         print(">>> Cannot create account")
         print("Error: " +str(e))
         return 404
-
     finally:
         if conn is not None:
             cur.close()
@@ -94,7 +95,7 @@ def create_a_merchant_account(accountId, merchantId):
 
 def get_account_token(accountId):
     conn = connection()
-    data = select_an_account(accountId,conn)
+    data = select_an_account(accountId)
     if not data:
         return 404
     else:
@@ -104,9 +105,9 @@ def get_account_token(accountId):
 
 @tokenIssuerRequired
 def topup_account(token, data, param):
-    conn = connection()
     accountId = data['accountId']
     try:
+        conn = connection()
         cur = conn.cursor()
         cur.execute("""SELECT balance FROM public.account WHERE account.accountId = '{}'
         """.format(accountId))
@@ -121,7 +122,28 @@ def topup_account(token, data, param):
         print(">>> Cannot select an account from table account")
         print("Error: " +str(e))
         return 404
+    finally:
+        if conn is not None:
+            cur.close()
+            conn.close()
 
+def update_balance_account(accountId, amount):
+    try:
+        conn = connection()
+        cur = conn.cursor()
+        cur.execute("""SELECT balance FROM public.account WHERE account.accountId = '{}'
+        """.format(accountId))
+        balance = float(cur.fetchone()[0]) 
+        balance = balance + amount
+
+        cur.execute("""UPDATE public.account SET balance = {0}
+        WHERE account.accountId = '{1}'""".format(balance, accountId))
+        conn.commit()
+        return "200"
+    except Exception as e:
+        print(">>> Cannot select an account from table account")
+        print("Error: " +str(e))
+        return 404
     finally:
         if conn is not None:
             cur.close()

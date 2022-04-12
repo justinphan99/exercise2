@@ -10,7 +10,7 @@ PORT_NUMBER = 8000
 
 if __name__ == '__main__':
     scheduler = BackgroundScheduler()
-    scheduler.add_job(checkTransactionExpire, 'interval', seconds=30)
+    scheduler.add_job(checkTransactionExpire, 'interval', seconds=5)
     scheduler.start()
 
     httpd = HTTPServer((HOST_NAME, PORT_NUMBER), Server)
