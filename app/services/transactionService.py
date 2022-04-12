@@ -272,7 +272,6 @@ def update_order_status(transactionId, payment_status):
     }
     headers = {'Content-type': 'application/json'}
     a = requests.post(url=url,data=json.dumps(data), headers=headers)
-    print(a.status_code)
     
 
 def getAllNotExpiredTransaction():
