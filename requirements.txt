@@ -13,6 +13,11 @@ multidict==6.0.2
 psycopg2==2.9.3
 pycparser==2.21
 PyJWT==2.3.0
+pytz==2022.1
+pytz-deprecation-shim==0.1.0.post0
 requests==2.27.1
+six==1.16.0
+tzdata==2022.1
+tzlocal==4.2
 urllib3==1.26.9
 yarl==1.7.2
