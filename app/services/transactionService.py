@@ -9,6 +9,7 @@ from app.utils.decorator import tokenMerchantRequired, tokenPersonalRequired
 from app.utils.baseFunc import connection
 from app.utils.timeOut import timeout
 import time
+from datetime import datetime
 import requests
 
 def select_a_transaction(transactionId,conn):
@@ -44,22 +45,7 @@ def select_a_transaction(transactionId,conn):
         print("Error: " +str(e))
         return 404
 
-
-@timeout(5)
-def check_transaction_status(transactionId, conn):
-    try:
-        data = select_a_transaction(transactionId, conn)
-        status = data['status']
-        if status == "COMPLETED":
-            return 1
-        else:
-            return check_transaction_status(transactionId,conn)
-    except Exception as e:
-        print("Error: "+str(e))
-
-
 @tokenMerchantRequired
-@timeout(5)
 def create_a_transaction(token, data):
     try:
         #time.sleep(10)
@@ -100,7 +86,7 @@ def create_a_transaction(token, data):
         extraData = data['extraData']
         dataTemp = {"merchantId": merchantId, "amount": amount, "extraData": extraData}
         signature = hashlib.md5(json.dumps(dataTemp).encode('utf-8')).hexdigest()
-        status = 'EXPIRED'
+        status = 'FAILED'
        
         try:
             query = """INSERT INTO public.transaction 
@@ -146,8 +132,7 @@ def confirm_a_transaction(token, data):
             "code": status,
             "message": "transaction {}".format(status)
         }
-
-        #update_order_status(transactionId,status,conn)
+        update_order_status(transactionId,status,conn)
 
         return data
         
@@ -193,11 +178,13 @@ def verify_a_transaction(token, data):
             "message": "transaction {}".format(status)
         }
 
+        update_order_status(transactionId,status,conn)
         return data
     
     except Exception as e:
         status = "FAILED"
         update_transaction_status(transactionId,status,conn)
+        update_order_status(transactionId,status,conn)
         print(">>> Cannot update transaction")
         print("Error: " +str(e))
         return 404
@@ -224,11 +211,14 @@ def cancel_a_transaction(token, data):
             "code": status,
             "message": "transaction {}".format(status)
         }
+        update_order_status(transactionId,status,conn)
+
         return data
     
     except Exception as e:
         status = "FAILED"
         update_transaction_status(transactionId,status,conn)
+        update_order_status(transactionId,status,conn)
         print(">>> Cannot cancel transaction")
         print("Error: " +str(e))
         return 404
@@ -245,6 +235,7 @@ def update_transaction_status(transactionId, status, conn):
         cur = conn.cursor()
         cur.execute(query)
         conn.commit()    
+        print("update transaction {0} to status {1}".format(transactionId,status))
         return 200
     except:
         return 404
@@ -252,7 +243,8 @@ def update_transaction_status(transactionId, status, conn):
 def update_order_status(transactionId, payment_status, conn):
     extraData = select_a_transaction(transactionId, conn)["extraData"]
     merchantId = select_a_transaction(transactionId, conn)["merchantId"]
-    url = select_a_merchant(merchantId,'',conn)['merchantUrl']
+    #url = select_a_merchant(merchantId,'',conn)['merchantUrl']
+    url = "http://127.0.0.1:5000/order/status"
     data = {
         "order_id": extraData,
         "payment_status": payment_status
@@ -261,3 +253,47 @@ def update_order_status(transactionId, payment_status, conn):
     a = requests.post(url=url,data=json.dumps(data), headers=headers)
     print(a.status_code)
     
+
+def getAllNotExpiredTransaction(conn):
+    sql = """SELECT * FROM public.transaction
+            WHERE status != 'CANCELED' AND status != 'COMPLETED' AND status != 'EXPIRED'
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        data = cur.fetchall()
+        transactions = []
+        for item in data:
+            transactions.append({
+            "transactionId" : item[0],
+            "merchantId" : item[1],           
+            "incomeAccount" : item[2],
+            "outcomeAccount" : item[3],
+            "amount" : item[4],
+            "extraData" : item[5],
+            "signature" : item[6],
+            "status" : item[7],
+            "createdAt": item[8]
+            })
+        return transactions
+    except Exception as e:
+        print("Can\'t get all transaction, error: " + str(e))
+        return 404
+
+
+def checkTransactionExpire():
+    conn = connection()
+    transactions = getAllNotExpiredTransaction(conn)
+    if (len(transactions) <= 0):
+        print('No expired transaction found')
+        return
+    else:
+        for tran in transactions:
+            tranDateTime= tran['createdAt']
+            now = datetime.now()
+            expiredTime = ((now - tranDateTime).total_seconds())/60
+            if (expiredTime > 5):
+                update_transaction_status(tran['transactionId'],'EXPIRED',conn)
+                update_order_status(tran['transactionId'],'EXPIRED',conn)
+    if conn is not None:
+        conn.close()

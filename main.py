@@ -2,11 +2,17 @@
 import time
 from http.server import HTTPServer
 from app.server import Server
+from app.services.transactionService import checkTransactionExpire
+from apscheduler.schedulers.background import BackgroundScheduler
 
 HOST_NAME = 'localhost'
 PORT_NUMBER = 8000
 
 if __name__ == '__main__':
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(checkTransactionExpire, 'interval', seconds=30)
+    scheduler.start()
+
     httpd = HTTPServer((HOST_NAME, PORT_NUMBER), Server)
     print(time.asctime(), 'Server Starts - %s:%s' % (HOST_NAME, PORT_NUMBER))
     try:
